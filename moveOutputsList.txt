@@ -1,0 +1,13 @@
+# this is a list of the desired outputs of the pipeline that should be moved into the respective 0outputs folder by the workflow
+run.classify_single.kraken2_krona_plot
+run.classify_single.kraken2_top_taxa_report
+
+run.assemble_denovo.coverage_plot
+run.assemble_denovo.coverage_tsv
+run.assemble_denovo.aligned_bam
+run.assemble_denovo.final_assembly_fasta
+run.assemble_denovo.isnvs_vcf
+run.assemble_denovo.replicate_discordant_indels
+run.assemble_denovo.replicate_discordant_snps
+run.assemble_denovo.replicate_discordant_vcf
+run.assemble_denovo.mean_coverage
