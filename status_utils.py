@@ -1,7 +1,9 @@
 import csv
 import fcntl
+from datetime import datetime
 
 # update the status of a given sample in the status.tsv, with file locks
+# deprecated due to bad race dependencies
 def update_status(status_tsv, sample_name, status, execution_time=None):
 
     # open the table, lock it so other executions can't also read/write to it
@@ -34,3 +36,19 @@ def update_status(status_tsv, sample_name, status, execution_time=None):
         finally:
             fcntl.flock(f, fcntl.LOCK_UN)
 
+# appending a row is far safer
+def add_status_log(status_log_path, sample_name, status, execution_time=None):
+    with open(status_log_path, "a") as f:
+        fcntl.flock(f, fcntl.LOCK_EX)
+
+        try:
+            writer = csv.writer(f, delimiter = '\t')
+            writer.writerow([datetime.now().isoformat(), sample_name, status, execution_time])
+
+        finally:
+            fcntl.flock(f, fcntl.LOCK_UN)
+
+# need to write a function for converting from the status log to the nicely formatted table that i had before from the TSV
+def construct_status_table_from_log(status_log_path):
+    pass
+    

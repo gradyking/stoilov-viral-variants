@@ -3,7 +3,7 @@
 # update status.tsv that the workflow is running with the time that it started
 
 import sys
-from status_utils import update_status
+from status_utils import add_status_log
 from datetime import datetime
 
 def main():
@@ -13,9 +13,9 @@ def main():
         )
 
     sample_name = sys.argv[1]
-    status_tsv = sys.argv[2]
+    status_log_tsv = sys.argv[2]
 
     now = datetime.now()
-    update_status(status_tsv, sample_name, "running", f"started {now.hour:02}:{now.minute:02}:{now.second:02}")
-
+    add_status_log(status_log_tsv, sample_name, "running", None)
+    print(f'add_status_log took {datetime.now() - now}')
 main()

@@ -2,13 +2,13 @@
 # post-workflow tasks using the metadata.json
 # move the output files in moveOutputsList.txt to the 0outputs folder that the metadata.json file is located in
 #     if the workflow doesn't complete properly, it still attempts to move the Krona plot
-# write to status.tsv
+# write to status_log.tsv
 
 import os
 import sys
 import json
 from pathlib import Path
-from status_utils import update_status
+from status_utils import add_status_log
 from datetime import datetime
 
 def subtract_times(t1, t2):
@@ -51,7 +51,7 @@ def main():
     
     # find sample name to be passed into update_status
     sample_name = metadata_file.parents[0].name
-    status_tsv = metadata_file.parents[1] / "status.tsv"
+    status_log_tsv = metadata_file.parents[1] / "status_log.tsv"
 
     with open('moveOutputsList.txt', 'r') as file:
         # remove comments and empty lines from from file
@@ -71,10 +71,10 @@ def main():
     if len(metadata['outputs']) == 0:
         print("overall pipeline failed, attempting to move Krona plot to output")
         try:
-            update_status(status_tsv, sample_name, "finished with error in assemble_denovo", execution_time)
+            add_status_log(status_log_tsv, sample_name, "finished with error in assemble_denovo", execution_time)
             create_symlink(metadata['calls']['run.classify_single'][0]['outputs']['kraken2_krona_plot'], output_dir / "kraken2_krona_plot.html")
         except:
-            update_status(status_tsv, sample_name, "errored out on classify_single", execution_time)
+            add_status_log(status_log_tsv, sample_name, "errored out on classify_single", execution_time)
             raise Exception("classify_single had an issue while running. check stdout.txt and/or stderr.txt")
     else:
         for output in desired_outputs:
@@ -108,6 +108,6 @@ def main():
         
                 print(f"created symlink for {output}")
         
-        update_status(status_tsv, sample_name, "finished", execution_time)
+        add_status_log(status_log_tsv, sample_name, "finished", execution_time)
 
 main()
