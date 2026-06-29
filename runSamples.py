@@ -111,26 +111,31 @@ def main():
         
         # prevent submitting all jobs instantly
         time.sleep(0.2)
-    
-        # after scheduling all of them, write the initial status table
-#         rows = [[s,"scheduled",None] for s in scheduled_samples]
-# 
-#         writer.writerow(["sample_name", "status", "execution_length"])
-#         writer.writerows(rows)
 
-       
+    # find current path to pass to script
+    current_path = sys.path[0]
 
-#     # create a bash script that will print status.tsv in a pretty way
-#     with open(f"0outputs/{current_time}/status.sh", "w") as f:
-#         f.writelines(["#!/bin/bash\n", 
-#                       "# get local directory\n",
-#                       "SCRIPT_DIR=$(cd -- \"$(dirname -- \"${BASH_SOURCE[0]}\")\" &>/dev/null && pwd)\n",
-#                       "column -t -s $'\t' \"$SCRIPT_DIR/status.tsv\""])
-# 
-#     # https://stackoverflow.com/a/33179977 make status executable (+x)
-#     os.chmod(f"0outputs/{current_time}/status.sh", os.stat(f"0outputs/{current_time}/status.sh").st_mode | 0o111)
-# 
-#     print(f"To print status table, run:\n0outputs/{current_time}/status.sh")
+    # create a bash script that will print status.tsv in a pretty way
+    # this bash script is constructed weirdly, because it can be run from any directory
+    # the SCRIPT_DIR gets the local directory for the bash script (which also contains the status_log.tsv and the status.tsv that gets made)
+    # the python code adds the current_path (which also contains status_utils.py) then imports it and passes in the path local to the bash script to the status table function
+    # to have the $SCRIPT_DIR actually replace itself in the python command, i used https://stackoverflow.com/questions/840536/how-to-use-an-environment-variable-inside-a-quoted-string-in-bash#comment58143383_9420853
+    # this makes it so that the bash script is directory agnostic (i think)
+    with open(f"0outputs/{current_time}/status.sh", "w") as f:
+        f.writelines("\n".join(
+         ["#!/bin/bash", 
+          "",
+          "# get bash local directory https://stackoverflow.com/a/246128",
+          "SCRIPT_DIR=$(cd -- \"$(dirname -- \"${BASH_SOURCE[0]}\")\" &>/dev/null && pwd)",
+          "",
+          "# run python script to generate status.tsv",
+         f"python -c 'import sys; sys.path.append(\"{current_path}\"); import status_utils; status_utils.construct_status_table_from_log(\"'\"$SCRIPT_DIR\"'/status_log.tsv\")'",
+          "column -t -s $'\t' \"$SCRIPT_DIR/status.tsv\""]))
+
+    # https://stackoverflow.com/a/33179977 make status executable (+x)
+    os.chmod(f"0outputs/{current_time}/status.sh", os.stat(f"0outputs/{current_time}/status.sh").st_mode | 0o111)
+
+    print(f"To print status table, run:\n0outputs/{current_time}/status.sh")
 
 if __name__ == "__main__":
     main()
