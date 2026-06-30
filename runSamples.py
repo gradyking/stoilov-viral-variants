@@ -23,12 +23,13 @@ def main():
             "Usage: python runSamples.py [sample folder names]"
         )
 
+    # find the time and all unique names of parent folders to name the output folder
     current_time = datetime.now().strftime("%Y-%m-%d_%H:%M:%S")
+    parents = "_".join(set([Path(d).parent.name for d in samples]))
 
-    # i have to open and lock the file first to prevent a race condition between the first scheduled pipelines starting to execute before the last pipeline is even scheduled
-    os.makedirs(f"0outputs/{current_time}")
+    output_parent = f"0outputs/{current_time}_{parents}"
+    os.makedirs(output_parent)
     
-
     scheduled_samples = list()
     for sample in samples:
         path = Path(sample)
@@ -58,7 +59,7 @@ def main():
             continue
 
         # construct output path and make sure it exists. currently have it grouped by original time that runSamples.py is called
-        output_path = f"0outputs/{current_time}/{sample_name}"
+        output_path = f"{output_parent}/{sample_name}"
         os.makedirs(output_path, exist_ok=True)
 
         with open(f"{output_path}/input.json", "w") as jf:
@@ -70,7 +71,7 @@ def main():
         module load singularity
         module load lang/java/jdk-17.0.1
 
-        python step0.py "{sample_name}" "0outputs/{current_time}/status_log.tsv"
+        python step0.py "{sample_name}" "{output_parent}/status_log.tsv"
         
         java -Dconfig.file=cromwellWithSingularity.conf \
             -jar cromwell-88.jar run \
@@ -99,7 +100,7 @@ def main():
         print(f"Scheduled {sample_name}_{current_time}" + " -- " + result.stdout.rstrip()) #remove newline at end of stdout
         scheduled_samples.append(sample_name)
 
-        with open(f"0outputs/{current_time}/status_log.tsv", 'a', newline='') as f:
+        with open(f"{output_parent}/status_log.tsv", 'a', newline='') as f:
             fcntl.flock(f, fcntl.LOCK_EX)
 
             # write info about scheduled sample to the .tsv
@@ -121,7 +122,7 @@ def main():
     # the python code adds the current_path (which also contains status_utils.py) then imports it and passes in the path local to the bash script to the status table function
     # to have the $SCRIPT_DIR actually replace itself in the python command, i used https://stackoverflow.com/questions/840536/how-to-use-an-environment-variable-inside-a-quoted-string-in-bash#comment58143383_9420853
     # this makes it so that the bash script is directory agnostic (i think)
-    with open(f"0outputs/{current_time}/status.sh", "w") as f:
+    with open(f"{output_parent}/status.sh", "w") as f:
         f.writelines("\n".join(
          ["#!/bin/bash", 
           "",
@@ -133,9 +134,9 @@ def main():
           "column -t -s $'\t' \"$SCRIPT_DIR/status.tsv\""]))
 
     # https://stackoverflow.com/a/33179977 make status executable (+x)
-    os.chmod(f"0outputs/{current_time}/status.sh", os.stat(f"0outputs/{current_time}/status.sh").st_mode | 0o111)
+    os.chmod(f"{output_parent}/status.sh", os.stat(f"{output_parent}/status.sh").st_mode | 0o111)
 
-    print(f"To print status table, run:\n0outputs/{current_time}/status.sh")
+    print(f"To print status table, run:\n{output_parent}/status.sh")
 
 if __name__ == "__main__":
     main()
