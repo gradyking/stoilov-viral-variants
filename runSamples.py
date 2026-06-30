@@ -1,4 +1,9 @@
 #!/usr/bin/env python3
+# This is the main script for orchestrating the whole pipeline. pass in a list of samples (and an optional -w parameter to pass in the name of the full.wdl file)
+# the script makes sure the inputs are valid, then schedules SLURM jobs for each sample 
+# performs step0.py, the Cromwell pipeline in full.wdl to analyze viral variants, and step4.py
+# outputs are written to the output_parent path for each request to runSamples, and to the output_path for each sample within that request
+# each step writes to a status_log.tsv, and a table can be viewed of the status of each sample's analysis with status.sh
 
 import os
 import sys

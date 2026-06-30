@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # pre-workflow tasks:
-# update status.tsv that the workflow is running with the time that it started
+# update status_log.tsv that the workflow is running with the time that it started
 
 import sys
 from status_utils import add_status_log
