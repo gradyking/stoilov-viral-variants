@@ -64,7 +64,6 @@ def assign_priority(status):
 
 # need to write a function for converting from the status log to the nicely formatted table that i had before from the TSV
 def construct_status_table_from_log(status_log_path):
-    print('ahhhh')
     status_table_path = Path(status_log_path).parents[0] / "status.tsv"
     output_status_table = list()
 
@@ -73,22 +72,24 @@ def construct_status_table_from_log(status_log_path):
         reader = csv.reader(f, delimiter = '\t')
         reads = list(reader)
         for row in reads:
-            timestamp, sample_name, status = row
-            
             if(len(row) == 4):
-                execution_time = row[3]
+                timestamp, sample_name, status, execution_time = row
             else:
+                timestamp, sample_name, status = row
                 execution_time = None
-                
+            
             if sample_name not in samples.keys():
                 samples[sample_name] = [(timestamp, status, execution_time),]
             else:
                 samples[sample_name].append((timestamp, status, execution_time))
 
-    print('read')
-
+    error = 0
     for sample_name in sorted(samples.keys()):
         statuses = [x[1] for x in samples[sample_name]]
+
+        # update error if "error" is found in any status for any sample
+        if any(["error" in status for status in statuses]) and error == 0:
+            error = 1
         priority = [assign_priority(x) for x in statuses]
         highestPriorityIndices = [i for i, x in enumerate(priority) if x == max(priority)]
         # the only scenario that might have mutiple with the same priority would be multiple errors.
@@ -97,12 +98,21 @@ def construct_status_table_from_log(status_log_path):
         status = " | ".join([x for i, x in enumerate(statuses) if i in highestPriorityIndices]) # slices statuses list by highestPriorityIndices, then joins them with |
         execution_time = samples[sample_name][highestPriorityIndices[-1]][2]
 
-        print(f"{sample_name}, {timestamp}, {status}, {execution_time}")
+        # print(f"{sample_name}, {timestamp}, {status}, {execution_time}")
         output_status_table.append((sample_name, timestamp, status, execution_time))
 
     with open(status_table_path, 'w') as f:
         writer = csv.writer(f, delimiter = '\t')
         writer.writerow(["sample_name", "timestamp", "status", "execution_time"])
         for row in output_status_table:
-            print(row)
+            # print(row)
             writer.writerow(row)
+        # if at least one status message mentions an error, I put this message at the bottom of the status table as advice for what to look for
+        if error:
+            writer.writerow(["at least one sample has an error. to investigate, I recommend "
+"looking through the sample's metadata.json (Firefox has a good "
+"json viewer) and for example, in run.classify_single, you can "
+"find both the description of failures in the 'failures' key, "
+"as well as in 'subWorkflowMetadata' -> 'workflowRoot' the "
+"directory where the given task was ran, where you can find "
+"stderr and stderr.background for the task that errored out.",])

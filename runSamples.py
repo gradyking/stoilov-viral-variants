@@ -14,14 +14,29 @@ def main():
     
     # remove "runSamples.py" from args, the rest are samples
     samples = sys.argv[1:]
-    print(samples)
+    # print(samples)
 
-    # check if they gave all valid folders for samples
-    print(list(os.path.isdir(d) for d in samples))
-    if len(sys.argv) < 2 or not all(os.path.isdir(d) for d in samples):
-        sys.exit(
-            "Usage: python runSamples.py [sample folder names]"
-        )
+    # find the w parameter, and if it exists, change the wdl_name param to the passed filename
+    wdl_name = "full.wdl"
+    if "-w" in samples:
+        w_index = samples.index("-w")
+        wdl_name = samples[w_index + 1]
+        del samples[w_index:w_index + 2]
+
+    # check if they gave all valid folders for samples and a valid wdl_name
+    # print(list(os.path.isdir(d) for d in samples))
+    exit = 0
+    if len(sys.argv) < 2:
+        exit = 1
+        print("please specify at least one sample folder name")
+    if not all(os.path.isdir(d) for d in samples):
+        exit = 1
+        print("please make sure all samples provided are valid directories")
+    if not os.path.isfile(wdl_name):
+        exit = 1
+        print("please make sure the provided .wdl is a valid file")
+    if exit:
+        sys.exit("Usage: python runSamples.py -w [.wdl name] [sample folder names]")
 
     # find the time and all unique names of parent folders to name the output folder
     current_time = datetime.now().strftime("%Y-%m-%d_%H:%M:%S")
@@ -77,7 +92,7 @@ def main():
             -jar cromwell-88.jar run \
             --inputs "{output_path}/input.json" \
             --metadata-output "{output_path}/metadata.json" \
-        full.wdl
+        {wdl_name}
 
         python step4.py "{output_path}/metadata.json"
         """
@@ -121,7 +136,6 @@ def main():
     # the SCRIPT_DIR gets the local directory for the bash script (which also contains the status_log.tsv and the status.tsv that gets made)
     # the python code adds the current_path (which also contains status_utils.py) then imports it and passes in the path local to the bash script to the status table function
     # to have the $SCRIPT_DIR actually replace itself in the python command, i used https://stackoverflow.com/questions/840536/how-to-use-an-environment-variable-inside-a-quoted-string-in-bash#comment58143383_9420853
-    # this makes it so that the bash script is directory agnostic (i think)
     with open(f"{output_parent}/status.sh", "w") as f:
         f.writelines("\n".join(
          ["#!/bin/bash", 
