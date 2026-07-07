@@ -23,19 +23,15 @@ def subtract_times(t1, t2):
     
     return(f"{hours:02}:{minutes:02}:{seconds:02}")
 
-# Safe symlink creation function from here https://zetcode.com/python/os-symlink/
-def create_symlink(src, dst):
+# Safe hard link creation function from here https://zetcode.com/python/os-symlink/
+def create_link(src, dst):
     try:
-        os.symlink(src, dst)
+        os.link(src, dst)
     except FileExistsError:
         if os.path.islink(dst):
-            print(f"Symlink {dst} already exists")
-            # Optionally update existing symlink
-            # os.remove(dst)
-            # os.symlink(src, dst)
-            # print(f"Updated {dst} to point to {src}")
-        # else:
-            # print(f"{dst} exists but isn't a symlink")
+            print(f"Hard link {dst} already exists")
+        else:
+            print(f"{dst} exists but isn't a link")
 
 def main():
     if len(sys.argv) < 1:
@@ -72,7 +68,7 @@ def main():
         print("overall pipeline failed, attempting to move Krona plot to output")
         try:
             add_status_log(status_log_tsv, sample_name, "finished with error in assemble_denovo", execution_time)
-            create_symlink(metadata['calls']['run.classify_single'][0]['outputs']['kraken2_krona_plot'], output_dir / "kraken2_krona_plot.html")
+            create_link(metadata['calls']['run.classify_single'][0]['outputs']['kraken2_krona_plot'], output_dir / "kraken2_krona_plot.html")
         except:
             add_status_log(status_log_tsv, sample_name, "errored out on classify_single", execution_time)
             raise Exception("classify_single had an issue while running. check stdout.txt and/or stderr.txt")
@@ -104,9 +100,9 @@ def main():
                 new_dir = output_dir / (output + original_file_extension)
         
                 # create a simlink between the original file location and the new location
-                create_symlink(original_file, new_dir)
+                create_link(original_file, new_dir)
         
-                print(f"created symlink for {output}")
+                print(f"created hard link for {output}")
         
         add_status_log(status_log_tsv, sample_name, "finished", execution_time)
 
