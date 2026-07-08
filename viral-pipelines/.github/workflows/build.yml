@@ -1,0 +1,382 @@
+name: "viral-pipelines CI"
+
+on:
+  push:
+  merge_group:
+  pull_request:
+    branches:
+      - master
+  release:
+    types:
+      - created
+
+concurrency:
+  # Group jobs by the branch or tag ref to ensure only one job runs for a ref at a time.
+  # for pull requests, github.ref is the branch being merged into
+  # for pushes, github.ref is the name of the branch to which the commit/push was made
+  group: ${{ github.ref }}
+  # Cancel any in-progress jobs for the same group
+  cancel-in-progress: true
+
+env:
+  PYTHONIOENCODING: UTF8
+  DOCKER_REGISTRY: "quay.io"
+  DOCKER_REPO_PROD: "quay.io/broadinstitute/viral-pipelines"
+  DOCKER_REPO_DEV: "quay.io/broadinstitute/viral-pipelines-dev"
+  MODULE_VERSIONS: "requirements-modules.txt"
+
+  # TravisCI variables described here:
+  #   https://docs.travis-ci.com/user/environment-variables/
+  # GitHub Actions environment variables and context described here:
+  #   https://docs.github.com/en/actions/reference/environment-variables
+  #   https://docs.github.com/en/actions/reference/context-and-expression-syntax-for-github-actions#env-context
+  GITHUB_ACTIONS_COMMIT: ${{ github.sha }}
+  GITHUB_ACTIONS_BUILD_DIR: ${{ github.workspace }}
+  GITHUB_ACTIONS_BRANCH: ${{ github.ref }}
+  GITHUB_ACTIONS_PULL_REQUEST: ${{ github.event.number }}
+  GITHUB_ACTIONS_PULL_REQUEST_BRANCH: ${{ github.head_ref }}
+  GITHUB_ACTIONS_PULL_REQUEST_SHA : ${{ github.event.pull_request.head.sha }}
+  GITHUB_ACTIONS_BASE_REF: ${{ github.base_ref }}
+
+jobs:
+  validate_wdl_miniwdl:
+    # Run if not a push event or if there's no pull request for the branch
+    if: github.event_name != 'push' || github.event.pull_request == null
+    runs-on: ubuntu-24.04
+    steps:
+      - name: checkout repository
+        uses: actions/checkout@v4
+      # fetch git tags (tagged releases) because 
+      # actions/checkout@v4 does either a full checkout or a shallow checkout without tags
+      - name: fetch tags
+        run: git fetch --prune --unshallow --tags      
+      - name: Programmatic environment setup
+        run: |
+          set -e -x
+          # $GITHUB_ENV is available for subsequent steps
+          GITHUB_ACTIONS_TAG=$(git describe --tags --exact-match && sed 's/^v//g' || echo '')
+          echo "GITHUB_ACTIONS_TAG=$GITHUB_ACTIONS_TAG" >> $GITHUB_ENV
+          # 
+          # Set GITHUB_ACTIONS_BRANCH
+          # TRAVIS_BRANCH: (via https://docs.travis-ci.com/user/environment-variables/ )
+          #   for push builds, or builds not triggered by a pull request, this is the name of the branch.
+          #   for builds triggered by a pull request this is the name of the branch targeted by the pull request.
+          #   for builds triggered by a tag, this is the same as the name of the tag (TRAVIS_TAG).
+          # if GITHUB_ACTIONS_PULL_REQUEST_BRANCH is set, this is a pull request build
+          if [[ $GITHUB_ACTIONS_PULL_REQUEST_BRANCH ]]; then
+            GITHUB_ACTIONS_BRANCH=${GITHUB_ACTIONS_BASE_REF##*/}
+          # if event_name=="release", this is a tagged build
+          elif [[ "${{ github.event_name }}" == "release" ]]; then
+            GITHUB_ACTIONS_BRANCH=$GITHUB_ACTIONS_TAG
+          else
+            GITHUB_ACTIONS_BRANCH=$(git rev-parse --abbrev-ref HEAD)
+          fi
+          echo "GITHUB_ACTIONS_BRANCH=$GITHUB_ACTIONS_BRANCH"
+          echo "GITHUB_ACTIONS_BRANCH=$GITHUB_ACTIONS_BRANCH" >> $GITHUB_ENV
+      - name: List environment
+        run: |
+          env
+      - name: install python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+      - name: install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get -y install shellcheck
+      - name: install miniwdl
+        run: |
+          pip3 -q install miniwdl
+      - name: run miniwdl checks
+        shell: bash
+        run: |
+          set -e
+          github_actions_ci/check-wdl-runtimes.sh
+          miniwdl check pipes/WDL/workflows/*.wdl
+
+  validate_wdl_womtool:
+    # Run if not a push event or if there's no pull request for the branch
+    if: github.event_name != 'push' || github.event.pull_request == null
+    runs-on: ubuntu-24.04
+    steps:
+      - name: checkout repository
+        uses: actions/checkout@v4
+      # fetch git tags (tagged releases) because 
+      # actions/checkout@v4 does either a full checkout or a shallow checkout without tags
+      - name: fetch tags
+        run: git fetch --prune --unshallow --tags
+      - name: Programmatic environment setup
+        run: |
+          set -e -x
+          # $GITHUB_ENV is available for subsequent steps
+          GITHUB_ACTIONS_TAG=$(git describe --tags --exact-match && sed 's/^v//g' || echo '')
+          echo "GITHUB_ACTIONS_TAG=$GITHUB_ACTIONS_TAG" >> $GITHUB_ENV
+          # 
+          # Set GITHUB_ACTIONS_BRANCH
+          # TRAVIS_BRANCH: (via https://docs.travis-ci.com/user/environment-variables/ )
+          #   for push builds, or builds not triggered by a pull request, this is the name of the branch.
+          #   for builds triggered by a pull request this is the name of the branch targeted by the pull request.
+          #   for builds triggered by a tag, this is the same as the name of the tag (TRAVIS_TAG).
+          if [[ $GITHUB_ACTIONS_PULL_REQUEST_BRANCH ]]; then
+            GITHUB_ACTIONS_BRANCH=${GITHUB_ACTIONS_BASE_REF##*/}
+          # if event_name=="release", this is a tagged build
+          elif [[ "${{ github.event_name }}" == "release" ]]; then
+            GITHUB_ACTIONS_BRANCH=$GITHUB_ACTIONS_TAG
+          else
+            GITHUB_ACTIONS_BRANCH=$(git rev-parse --abbrev-ref HEAD)
+          fi
+          echo "GITHUB_ACTIONS_BRANCH=$GITHUB_ACTIONS_BRANCH"
+          echo "GITHUB_ACTIONS_BRANCH=$GITHUB_ACTIONS_BRANCH" >> $GITHUB_ENV
+      - name: install java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'adopt'
+          java-version: '11'
+      - name: install cromwell+womtool+dxWDL
+        shell: bash
+        run: |
+          github_actions_ci/install-wdl.sh
+      - name: run womtool checks
+        shell: bash
+        run: |
+          set -e
+          github_actions_ci/check-wdl-runtimes.sh
+          github_actions_ci/validate-wdl-womtool.sh
+
+  ## note: this test_docs job does not actually produce the output on readthedocs
+  ## readthedocs does its own build trigger. this job exists simply to 
+  ## attempt a build and alert us of documentation build failures because otherwise we would never know.
+  test_docs:
+    # Run if not a push event or if there's no pull request for the branch
+    if: github.event_name != 'push' || github.event.pull_request == null
+    runs-on: ubuntu-24.04
+    steps:
+      - name: checkout repository
+        uses: actions/checkout@v4
+      # fetch git tags (tagged releases) because 
+      # actions/checkout@v4 does either a full checkout or a shallow checkout without tags
+      - name: fetch tags
+        run: git fetch --prune --unshallow --tags
+      - name: Programmatic environment setup
+        run: |
+          set -e -x
+          # $GITHUB_ENV is available for subsequent steps
+          GITHUB_ACTIONS_TAG=$(git describe --tags --exact-match && sed 's/^v//g' || echo '')
+          echo "GITHUB_ACTIONS_TAG=$GITHUB_ACTIONS_TAG" >> $GITHUB_ENV
+          # 
+          # Set GITHUB_ACTIONS_BRANCH
+          # TRAVIS_BRANCH: (via https://docs.travis-ci.com/user/environment-variables/ )
+          #   for push builds, or builds not triggered by a pull request, this is the name of the branch.
+          #   for builds triggered by a pull request this is the name of the branch targeted by the pull request.
+          #   for builds triggered by a tag, this is the same as the name of the tag (TRAVIS_TAG).
+          if [[ $GITHUB_ACTIONS_PULL_REQUEST_BRANCH ]]; then
+            GITHUB_ACTIONS_BRANCH=${GITHUB_ACTIONS_BASE_REF##*/}
+          # if event_name=="release", this is a tagged build
+          elif [[ "${{ github.event_name }}" == "release" ]]; then
+            GITHUB_ACTIONS_BRANCH=$GITHUB_ACTIONS_TAG
+          else
+            GITHUB_ACTIONS_BRANCH=$(git rev-parse --abbrev-ref HEAD)
+          fi
+          echo "GITHUB_ACTIONS_BRANCH=$GITHUB_ACTIONS_BRANCH"
+          echo "GITHUB_ACTIONS_BRANCH=$GITHUB_ACTIONS_BRANCH" >> $GITHUB_ENV
+      - name: install python
+        uses: actions/setup-python@v5
+        with: 
+          python-version: '3.10'
+      - name: install docs dependencies
+        shell: bash
+        run: |
+          github_actions_ci/install-pip-docs.sh
+      - name: test docs build
+        shell: bash
+        run: |
+          github_actions_ci/build-docs.sh
+
+  test_cromwell:
+    # Run if not a push event or if there's no pull request for the branch
+    if: github.event_name != 'push' || github.event.pull_request == null
+    needs: validate_wdl_womtool
+    runs-on: ubuntu-24.04
+    steps:
+      - name: checkout repository
+        uses: actions/checkout@v4
+      # fetch git tags (tagged releases) because 
+      # actions/checkout@v4 does either a full checkout or a shallow checkout without tags
+      - name: fetch tags
+        run: git fetch --prune --unshallow --tags
+      - name: Programmatic environment setup
+        run: |
+          set -e -x
+          # $GITHUB_ENV is available for subsequent steps
+          GITHUB_ACTIONS_TAG=$(git describe --tags --exact-match && sed 's/^v//g' || echo '')
+          echo "GITHUB_ACTIONS_TAG=$GITHUB_ACTIONS_TAG" >> $GITHUB_ENV
+          # 
+          # Set GITHUB_ACTIONS_BRANCH
+          # TRAVIS_BRANCH: (via https://docs.travis-ci.com/user/environment-variables/ )
+          #   for push builds, or builds not triggered by a pull request, this is the name of the branch.
+          #   for builds triggered by a pull request this is the name of the branch targeted by the pull request.
+          #   for builds triggered by a tag, this is the same as the name of the tag (TRAVIS_TAG).
+          if [[ $GITHUB_ACTIONS_PULL_REQUEST_BRANCH ]]; then
+            GITHUB_ACTIONS_BRANCH=${GITHUB_ACTIONS_BASE_REF##*/}
+          # if event_name=="release", this is a tagged build
+          elif [[ "${{ github.event_name }}" == "release" ]]; then
+            GITHUB_ACTIONS_BRANCH=$GITHUB_ACTIONS_TAG
+          else
+            GITHUB_ACTIONS_BRANCH=$(git rev-parse --abbrev-ref HEAD)
+          fi
+          echo "GITHUB_ACTIONS_BRANCH=$GITHUB_ACTIONS_BRANCH"
+          echo "GITHUB_ACTIONS_BRANCH=$GITHUB_ACTIONS_BRANCH" >> $GITHUB_ENV
+      - name: clean up disk space
+        shell: bash
+        run: |
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /opt/ghc
+          sudo rm -rf "/usr/local/share/boost"
+          sudo rm -rf "$AGENT_TOOLSDIRECTORY"
+      - name: install java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'adopt'
+          java-version: '11'
+      - name: install cromwell+womtool+dxWDL
+        shell: bash
+        run: |
+          github_actions_ci/install-wdl.sh
+      - name: test with cromwell
+        shell: bash
+        run: |
+          set -e
+          github_actions_ci/relative-wdl-paths.sh
+          github_actions_ci/tests-cromwell.sh
+
+  test_miniwdl:
+    # Run if not a push event or if there's no pull request for the branch
+    if: github.event_name != 'push' || github.event.pull_request == null
+    needs: validate_wdl_miniwdl
+    runs-on: ubuntu-24.04
+    steps:
+      - name: checkout repository
+        uses: actions/checkout@v4
+      # fetch git tags (tagged releases) because 
+      # actions/checkout@v4 does either a full checkout or a shallow checkout without tags
+      - name: fetch tags
+        run: git fetch --prune --unshallow --tags
+      - name: Programmatic environment setup
+        run: |
+          set -e -x
+          # $GITHUB_ENV is available for subsequent steps
+          GITHUB_ACTIONS_TAG=$(git describe --tags --exact-match && sed 's/^v//g' || echo '')
+          echo "GITHUB_ACTIONS_TAG=$GITHUB_ACTIONS_TAG" >> $GITHUB_ENV
+          # 
+          # Set GITHUB_ACTIONS_BRANCH
+          # TRAVIS_BRANCH: (via https://docs.travis-ci.com/user/environment-variables/ )
+          #   for push builds, or builds not triggered by a pull request, this is the name of the branch.
+          #   for builds triggered by a pull request this is the name of the branch targeted by the pull request.
+          #   for builds triggered by a tag, this is the same as the name of the tag (TRAVIS_TAG).
+          if [[ $GITHUB_ACTIONS_PULL_REQUEST_BRANCH ]]; then
+            GITHUB_ACTIONS_BRANCH=${GITHUB_ACTIONS_BASE_REF##*/}
+          # if event_name=="release", this is a tagged build
+          elif [[ "${{ github.event_name }}" == "release" ]]; then
+            GITHUB_ACTIONS_BRANCH=$GITHUB_ACTIONS_TAG
+          else
+            GITHUB_ACTIONS_BRANCH=$(git rev-parse --abbrev-ref HEAD)
+          fi
+          echo "GITHUB_ACTIONS_BRANCH=$GITHUB_ACTIONS_BRANCH"
+          echo "GITHUB_ACTIONS_BRANCH=$GITHUB_ACTIONS_BRANCH" >> $GITHUB_ENV
+      - name: clean up disk space
+        shell: bash
+        run: |
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /opt/ghc
+          sudo rm -rf "/usr/local/share/boost"
+          sudo rm -rf "$AGENT_TOOLSDIRECTORY"
+      - name: install python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+      - name: install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get -y install jq
+      - name: install miniwdl
+        run: |
+          pip3 install miniwdl docker[tls] six
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      - name: test with miniwdl
+        shell: bash
+        run: |
+          github_actions_ci/tests-miniwdl.sh
+
+  deploy_dnanexus:
+    #if: ${{ github.event.ref == 'dnanexus' }}
+    if: github.event_name == 'release' || github.ref == 'refs/heads/master' || github.ref == 'refs/heads/dnanexus' || (github.event_name == 'pull_request' && github.base_ref == 'master')
+    # cancel earlier actions, if a commit is added to a branch or a PR
+    concurrency:
+      group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+      cancel-in-progress: true
+    needs:
+      - validate_wdl_womtool
+      - validate_wdl_miniwdl
+    runs-on: ubuntu-24.04
+    env:
+      # DX_API_TOKEN (for DNAnexus builds) -- GitHub Actions token #1, expires 2025-01-17
+      # stored here: https://github.com/broadinstitute/viral-pipelines/settings/secrets/actions
+      DX_API_TOKEN: ${{ secrets.DX_API_TOKEN }}
+      DX_PROJECT: project-F8PQ6380xf5bK0Qk0YPjB17P
+    steps:
+      - name: checkout repository
+        uses: actions/checkout@v4
+      # fetch git tags (tagged releases) because 
+      # actions/checkout@v4 does either a full checkout or a shallow checkout without tags
+      - name: fetch tags
+        run: git fetch --prune --unshallow --tags
+      - name: Programmatic environment setup
+        run: |
+          set -e -x
+          # $GITHUB_ENV is available for subsequent steps
+          GITHUB_ACTIONS_TAG=$(git describe --tags --exact-match && sed 's/^v//g' || echo '')
+          echo "GITHUB_ACTIONS_TAG=$GITHUB_ACTIONS_TAG" >> $GITHUB_ENV
+          # 
+          # Set GITHUB_ACTIONS_BRANCH
+          # TRAVIS_BRANCH: (via https://docs.travis-ci.com/user/environment-variables/ )
+          #   for push builds, or builds not triggered by a pull request, this is the name of the branch.
+          #   for builds triggered by a pull request this is the name of the branch targeted by the pull request.
+          #   for builds triggered by a tag, this is the same as the name of the tag (TRAVIS_TAG).
+          if [[ $GITHUB_ACTIONS_PULL_REQUEST_BRANCH ]]; then
+            GITHUB_ACTIONS_BRANCH=${GITHUB_ACTIONS_BASE_REF##*/}
+          # if event_name=="release", this is a tagged build
+          elif [[ "${{ github.event_name }}" == "release" ]]; then
+            GITHUB_ACTIONS_BRANCH=$GITHUB_ACTIONS_TAG
+          else
+            GITHUB_ACTIONS_BRANCH=$(git rev-parse --abbrev-ref HEAD)
+          fi
+          echo "GITHUB_ACTIONS_BRANCH=$GITHUB_ACTIONS_BRANCH"
+          echo "GITHUB_ACTIONS_BRANCH=$GITHUB_ACTIONS_BRANCH" >> $GITHUB_ENV
+      - name: list GH event info
+        run: |
+          echo "${{ github.event_name }}"
+          echo "${{ github.event.action }}"
+          echo "${{ github.event.pull_request.merged }}"
+      - name: install python
+        uses: actions/setup-python@v5
+        with: 
+          python-version: '3.10'
+      - name: install java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'adopt'
+          java-version: '11'
+      - name: install miniwdl
+        run: |
+          pip3 install pyyaml dxpy
+      - name: install dx toolkit
+        shell: bash
+        run: |
+          github_actions_ci/install-wdl.sh
+      - name: 
+        shell: bash
+        run: |
+          github_actions_ci/relative-wdl-paths.sh
+          github_actions_ci/build-dx.sh
+          github_actions_ci/tests-dx.sh
