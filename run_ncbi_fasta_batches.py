@@ -12,7 +12,7 @@ import json
 from pathlib import Path
 from collections import defaultdict
 
-SIF_PATH = "../broadDockers/viral-phylo.sif"
+SIF_PATH = "broadDockers/viral-phylo.sif"
 BATCH_SIZE = 100
 JSON_FILENAME = "taxon_accessions.json"
 

@@ -24,12 +24,12 @@ workflow run {
     call step_2.classify_single {
         input:
             reads_bams =                          FastqToUBAM.unmapped_bam,
-            emailAddress =   "gpk00003@mix.wvu.edu",
-            spikein_db =                          "/scratch/gpk00003/20250601classify_single/ERCC92/ERCC92.fasta",
-            trim_clip_db =                        "/scratch/gpk00003/20250601classify_single/NexteraPE-PE.fasta",
-            kraken2_db_tgz =                      "/scratch/gpk00003/20250601classify_single/k2_viral_20250402.tar.gz",
-            krona_taxonomy_db_kraken2_tgz =       "/scratch/gpk00003/20250601classify_single/KronaTools/KronaTools-2.8.1/taxonomy/taxonomy.tab",
-            ncbi_taxdump_tgz =                    "/scratch/gpk00003/20250601classify_single/new_taxdump.tar.gz"
+            emailAddress =   "example@email.com",
+            spikein_db =                          "/gpfs20/scratch/gpk00003/20260717scratchPipeline/ERCC92.fa",
+            trim_clip_db =                        "/gpfs20/scratch/gpk00003/20260717scratchPipeline/NexteraPE-PE.fa",
+            kraken2_db_tgz =                      "/gpfs20/scratch/gpk00003/20260717scratchPipeline/k2_viral_20251015.tar.gz",
+            krona_taxonomy_db_kraken2_tgz =       "/gpfs20/scratch/gpk00003/20260717scratchPipeline/KronaTools-2.8.1/taxonomy/taxonomy.tab",
+            ncbi_taxdump_tgz =                    "/gpfs20/scratch/gpk00003/20260717scratchPipeline/new_taxdump.tar.gz"
     }
     
     Map[String, Array[String]] taxon_map = read_json("taxon_accessions.json")
@@ -46,7 +46,7 @@ workflow run {
         input:
             reads_unmapped_bams =       FastqToUBAM.unmapped_bam,
             reference_genome_fasta =    reference_genome_fastas,
-            trim_clip_db =              "/scratch/gpk00003/20250601classify_single/NexteraPE-PE.fasta"
+            trim_clip_db =              "/gpfs20/scratch/gpk00003/20260717scratchPipeline/NexteraPE-PE.fa"
     }        
 }
 

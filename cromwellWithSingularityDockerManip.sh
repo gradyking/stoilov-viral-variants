@@ -17,9 +17,12 @@ fi
 # manipulate quay.io/broadinstitute/viral-core@sha256:1f1b274195ac4f4c7b08c462757b3f124c3cc53f279ce99b938c520a0c5871f3 into viral-core
 docker_base="$(basename "${docker%%[@:]*}")"
 
-if [[ ! -f "/scratch/gpk00003/broadDockers/${docker_base}.sif" ]]; then
-  echo "ERROR: Singularity image /scratch/gpk00003/broadDockers/${docker_base}.sif not found."
+# find project folder
+SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)
+
+if [[ ! -f "$SCRIPT_DIR/broadDockers/${docker_base}.sif" ]]; then
+  echo "ERROR: Singularity image $SCRIPT_DIR/broadDockers/${docker_base}.sif not found."
   exit 1
 fi
 
-singularity exec --containall --bind "${cwd}:${docker_cwd}" "/scratch/gpk00003/broadDockers/${docker_base}.sif" "${job_shell}" "${docker_script}"
+singularity exec --containall --bind "${cwd}:${docker_cwd}" "$SCRIPT_DIR/broadDockers/${docker_base}.sif" "${job_shell}" "${docker_script}"
