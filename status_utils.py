@@ -89,10 +89,5 @@ def construct_status_table_from_log(status_log_path):
             writer.writerow(row)
         # if at least one status message mentions an error, I put this message at the bottom of the status table as advice for what to look for
         if error:
-            writer.writerow(["at least one sample has an error. to investigate, I recommend "
-"looking through the sample's metadata.json (Firefox has a good "
-"json viewer) and for example, in run.classify_single, you can "
-"find both the description of failures in the 'failures' key, "
-"as well as in 'subWorkflowMetadata' -> 'workflowRoot' the "
-"directory where the given task was ran, where you can find "
-"stderr and stderr.background for the task that errored out.",])
+            writer.writerow(["at least one sample has an error. some are relatively innocuous (i.e. no top taxon was found), "
+"but some aren't. to investigate, I recommend reading the Finding Errors entry on the wiki",])
