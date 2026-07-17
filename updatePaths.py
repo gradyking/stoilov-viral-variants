@@ -47,16 +47,23 @@ with open(conf_file, "w") as f:
 
 wdl_file = current_directory / "full.wdl"
 
+with open(wdl_file, "r") as f:
+    text = f.read()
+
+# Extract existing k2 filename from WDL
+k2_match = re.search(r'"([^"]*k2_viral_\d+\.tar\.gz)"', text)
+if not k2_match:
+    raise RuntimeError("Could not find k2_viral database in full.wdl")
+
+k2_filename = Path(k2_match.group(1)).name
+
 replacements = {
     "ERCC92.fa": current_directory / "ERCC92.fa",
     "NexteraPE-PE.fa": current_directory / "NexteraPE-PE.fa",
-    "k2_viral_20251015.tar.gz": current_directory / "k2_viral_20251015.tar.gz",
     "taxonomy.tab": current_directory / "KronaTools-2.8.1" / "taxonomy" / "taxonomy.tab",
     "new_taxdump.tar.gz": current_directory / "new_taxdump.tar.gz",
+    k2_filename: current_directory / k2_filename,
 }
-
-with open(wdl_file, "r") as f:
-    text = f.read()
 
 # find patterns like "/scratch/gpk00003/20260717scratchPipeline/ERCC92.fa" or "/home/me/files/ERCC92.fa"
 # and replaces them with "{new_path}/ERCC92.fa"
@@ -66,13 +73,6 @@ for filename, new_path in replacements.items():
         f'"{new_path}"',
         text,
     )
-
-# finds the emailAddress entry and replaces it with the new email passed in
-text = re.sub(
-    r'(emailAddress\s*=\s*)"[^"]*"',
-    rf'\1"{email}"',
-    text,
-)
 
 with open(wdl_file, "w") as f:
     f.write(text)
